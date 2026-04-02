@@ -298,9 +298,7 @@ private class FakeTaskDao : com.wulfderay.remindme.data.TaskDao {
 /**
  * Fake AlarmScheduler for testing.
  */
-class FakeAlarmScheduler : AlarmScheduler(
-    context = android.app.Application()
-) {
+class FakeAlarmScheduler : AlarmScheduler {
     val scheduledTasks = mutableListOf<TaskEntity>()
     val cancelledIds = mutableListOf<Long>()
 

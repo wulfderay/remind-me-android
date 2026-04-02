@@ -12,18 +12,31 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles scheduling and cancelling exact alarms for tasks.
+ * Interface for alarm scheduling operations.
+ * Allows easy substitution in tests.
+ */
+interface AlarmScheduler {
+    fun schedule(task: TaskEntity)
+    fun cancel(taskId: Long)
+    fun rescheduleWithOffset(taskId: Long, offsetMillis: Long)
+
+    companion object {
+        const val EXTRA_TASK_ID = "extra_task_id"
+    }
+}
+
+/**
+ * Production implementation of [AlarmScheduler].
  * Uses AlarmManager.setExactAndAllowWhileIdle for reliable delivery.
  * Each task gets a unique PendingIntent keyed by task.id.
  */
 @Singleton
-open class AlarmScheduler @Inject constructor(
+class AlarmSchedulerImpl @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : AlarmScheduler {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     companion object {
-        const val EXTRA_TASK_ID = "extra_task_id"
         private const val TAG = "AlarmScheduler"
     }
 
@@ -31,7 +44,7 @@ open class AlarmScheduler @Inject constructor(
      * Schedule an exact alarm for the given task.
      * Only schedules if the task is active and alarm time is in the future.
      */
-    open fun schedule(task: TaskEntity) {
+    override fun schedule(task: TaskEntity) {
         if (!task.isActive) {
             Log.d(TAG, "Skipping alarm for inactive task ${task.id}")
             return
@@ -64,7 +77,7 @@ open class AlarmScheduler @Inject constructor(
     /**
      * Cancel any scheduled alarm for the given task ID.
      */
-    open fun cancel(taskId: Long) {
+    override fun cancel(taskId: Long) {
         val pendingIntent = createPendingIntent(taskId)
         alarmManager.cancel(pendingIntent)
         Log.d(TAG, "Cancelled alarm for task $taskId")
@@ -73,7 +86,7 @@ open class AlarmScheduler @Inject constructor(
     /**
      * Reschedule an alarm with a time offset (used for snooze).
      */
-    open fun rescheduleWithOffset(taskId: Long, offsetMillis: Long) {
+    override fun rescheduleWithOffset(taskId: Long, offsetMillis: Long) {
         val newTime = System.currentTimeMillis() + offsetMillis
         val pendingIntent = createPendingIntent(taskId)
 
@@ -95,7 +108,7 @@ open class AlarmScheduler @Inject constructor(
 
     private fun createPendingIntent(taskId: Long): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
-            putExtra(EXTRA_TASK_ID, taskId)
+            putExtra(AlarmScheduler.EXTRA_TASK_ID, taskId)
         }
         return PendingIntent.getBroadcast(
             context,

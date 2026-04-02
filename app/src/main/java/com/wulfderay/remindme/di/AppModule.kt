@@ -2,6 +2,8 @@ package com.wulfderay.remindme.di
 
 import android.content.Context
 import androidx.room.Room
+import com.wulfderay.remindme.alarm.AlarmScheduler
+import com.wulfderay.remindme.alarm.AlarmSchedulerImpl
 import com.wulfderay.remindme.data.AppDatabase
 import com.wulfderay.remindme.data.TaskDao
 import dagger.Module
@@ -32,5 +34,11 @@ object AppModule {
     @Singleton
     fun provideTaskDao(database: AppDatabase): TaskDao {
         return database.taskDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAlarmScheduler(@ApplicationContext context: Context): AlarmScheduler {
+        return AlarmSchedulerImpl(context)
     }
 }
