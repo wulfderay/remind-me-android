@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 interface TaskDao {
 
     /** Observe all tasks ordered by alarm time (next due first). */
-    @Query("SELECT * FROM tasks ORDER BY alarmTime ASC")
+    @Query("SELECT * FROM tasks ORDER BY alarmTime IS NULL ASC, alarmTime ASC")
     fun getAllTasksByAlarmTime(): Flow<List<TaskEntity>>
 
     /** Observe all tasks ordered by creation time (latest first). */
@@ -56,6 +56,6 @@ interface TaskDao {
     suspend fun markActive(taskId: Long)
 
     /** Search tasks by title. */
-    @Query("SELECT * FROM tasks WHERE title LIKE '%' || :query || '%' ORDER BY alarmTime ASC")
+    @Query("SELECT * FROM tasks WHERE title LIKE '%' || :query || '%' ORDER BY alarmTime IS NULL ASC, alarmTime ASC")
     fun searchTasks(query: String): Flow<List<TaskEntity>>
 }

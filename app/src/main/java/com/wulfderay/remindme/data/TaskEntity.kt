@@ -20,7 +20,7 @@ data class TaskEntity(
     val id: Long = 0,
     val title: String,
     val description: String = "",
-    val alarmTime: Long,
+    val alarmTime: Long? = null,
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )

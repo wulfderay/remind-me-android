@@ -361,14 +361,16 @@ fun TaskItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = dateFormatter.format(Date(task.alarmTime)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (task.isActive && task.alarmTime < System.currentTimeMillis())
-                        MaterialTheme.colorScheme.error
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                task.alarmTime?.let { alarmTime ->
+                    Text(
+                        text = dateFormatter.format(Date(alarmTime)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (task.isActive && alarmTime < System.currentTimeMillis())
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

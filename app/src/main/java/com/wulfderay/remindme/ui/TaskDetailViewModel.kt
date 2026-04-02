@@ -20,7 +20,7 @@ import javax.inject.Inject
 data class TaskDetailUiState(
     val title: String = "",
     val description: String = "",
-    val alarmTime: Long = System.currentTimeMillis() + 3600_000,
+    val alarmTime: Long? = null,
     val isActive: Boolean = true,
     val isEditing: Boolean = false,
     val isSaved: Boolean = false,
@@ -38,6 +38,10 @@ class TaskDetailViewModel @Inject constructor(
     private val repository: TaskRepository,
     private val alarmScheduler: AlarmScheduler
 ) : ViewModel() {
+
+    private companion object {
+        const val DEFAULT_ALARM_OFFSET_MILLIS = 3600_000L
+    }
 
     private val taskId: Long = savedStateHandle.get<Long>("taskId") ?: -1L
 
@@ -78,6 +82,19 @@ class TaskDetailViewModel @Inject constructor(
         _uiState.update { it.copy(alarmTime = alarmTime, alarmTimeError = null) }
     }
 
+    fun setAlarmEnabled(enabled: Boolean) {
+        _uiState.update { state ->
+            if (enabled) {
+                state.copy(
+                    alarmTime = state.alarmTime ?: defaultAlarmTime(),
+                    alarmTimeError = null
+                )
+            } else {
+                state.copy(alarmTime = null, alarmTimeError = null)
+            }
+        }
+    }
+
     /**
      * Validate and save the task.
      * Returns true if saved successfully, false if validation fails.
@@ -93,7 +110,7 @@ class TaskDetailViewModel @Inject constructor(
             hasError = true
         }
 
-        if (state.alarmTime <= System.currentTimeMillis()) {
+        if (state.alarmTime != null && state.alarmTime <= System.currentTimeMillis()) {
             _uiState.update { it.copy(alarmTimeError = "Alarm time must be in the future") }
             hasError = true
         }
@@ -111,9 +128,8 @@ class TaskDetailViewModel @Inject constructor(
                 )
                 repository.update(updatedTask)
 
-                // Reschedule alarm if task is active
-                if (updatedTask.isActive) {
-                    alarmScheduler.cancel(updatedTask.id)
+                alarmScheduler.cancel(updatedTask.id)
+                if (updatedTask.isActive && updatedTask.alarmTime != null) {
                     alarmScheduler.schedule(updatedTask)
                 }
             } else {
@@ -125,12 +141,15 @@ class TaskDetailViewModel @Inject constructor(
                 )
                 val id = repository.insert(newTask)
 
-                // Schedule alarm for the new task
                 val savedTask = newTask.copy(id = id)
-                alarmScheduler.schedule(savedTask)
+                if (savedTask.alarmTime != null) {
+                    alarmScheduler.schedule(savedTask)
+                }
             }
 
             _uiState.update { it.copy(isSaved = true) }
         }
     }
+
+    private fun defaultAlarmTime(): Long = System.currentTimeMillis() + DEFAULT_ALARM_OFFSET_MILLIS
 }

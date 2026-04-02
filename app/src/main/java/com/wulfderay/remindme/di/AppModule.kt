@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.wulfderay.remindme.alarm.AlarmScheduler
 import com.wulfderay.remindme.alarm.AlarmSchedulerImpl
 import com.wulfderay.remindme.data.AppDatabase
+import com.wulfderay.remindme.data.MIGRATION_1_2
 import com.wulfderay.remindme.data.TaskDao
 import dagger.Module
 import dagger.Provides
@@ -27,7 +28,8 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "remindme_database"
-        ).build()
+        ).addMigrations(MIGRATION_1_2)
+            .build()
     }
 
     @Provides
