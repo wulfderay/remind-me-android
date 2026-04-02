@@ -1,6 +1,8 @@
 package com.wulfderay.remindme.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -20,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -33,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -125,42 +130,64 @@ fun TaskDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Alarm date/time section
-            Text(
-                text = "Alarm Date & Time",
-                style = MaterialTheme.typography.titleSmall,
-                color = if (uiState.alarmTimeError != null)
-                    MaterialTheme.colorScheme.error
-                else
-                    MaterialTheme.colorScheme.onSurface
-            )
-
-            if (uiState.alarmTimeError != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = uiState.alarmTimeError!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    text = "Enable Alarm",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Switch(
+                    checked = uiState.alarmTime != null,
+                    onCheckedChange = { enabled ->
+                        if (!enabled) {
+                            showDatePicker = false
+                            showTimePicker = false
+                        }
+                        viewModel.setAlarmEnabled(enabled)
+                    }
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            uiState.alarmTime?.let { alarmTime ->
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // Date picker button
-            OutlinedButton(
-                onClick = { showDatePicker = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Date: ${dateFormatter.format(Date(uiState.alarmTime))}")
-            }
+                Text(
+                    text = "Alarm Date & Time",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (uiState.alarmTimeError != null)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                if (uiState.alarmTimeError != null) {
+                    Text(
+                        text = uiState.alarmTimeError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
 
-            // Time picker button
-            OutlinedButton(
-                onClick = { showTimePicker = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Time: ${timeFormatter.format(Date(uiState.alarmTime))}")
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Date: ${dateFormatter.format(Date(alarmTime))}")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Time: ${timeFormatter.format(Date(alarmTime))}")
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -176,64 +203,68 @@ fun TaskDetailScreen(
     }
 
     // Date picker dialog
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = datePickerSelectionMillis(uiState.alarmTime)
-        )
+    uiState.alarmTime?.let { alarmTime ->
+        if (showDatePicker) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = datePickerSelectionMillis(alarmTime)
+            )
 
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { selectedDate ->
-                        viewModel.updateAlarmTime(
-                            mergePickedDateWithExistingTime(
-                                selectedDateUtcMillis = selectedDate,
-                                existingAlarmTimeMillis = uiState.alarmTime
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { selectedDate ->
+                            viewModel.updateAlarmTime(
+                                mergePickedDateWithExistingTime(
+                                    selectedDateUtcMillis = selectedDate,
+                                    existingAlarmTimeMillis = alarmTime
+                                )
                             )
-                        )
+                        }
+                        showDatePicker = false
+                    }) {
+                        Text("OK")
                     }
-                    showDatePicker = false
-                }) {
-                    Text("OK")
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) {
+                        Text("Cancel")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
+            ) {
+                DatePicker(state = datePickerState)
             }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 
     // Time picker dialog
-    if (showTimePicker) {
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = uiState.alarmTime
-        }
-        val timePickerState = rememberTimePickerState(
-            initialHour = calendar.get(Calendar.HOUR_OF_DAY),
-            initialMinute = calendar.get(Calendar.MINUTE),
-            is24Hour = true
-        )
-
-        TimePickerDialog(
-            onDismiss = { showTimePicker = false },
-            onConfirm = {
-                val newCal = Calendar.getInstance().apply {
-                    timeInMillis = uiState.alarmTime
-                    set(Calendar.HOUR_OF_DAY, timePickerState.hour)
-                    set(Calendar.MINUTE, timePickerState.minute)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                viewModel.updateAlarmTime(newCal.timeInMillis)
-                showTimePicker = false
+    uiState.alarmTime?.let { alarmTime ->
+        if (showTimePicker) {
+            val calendar = Calendar.getInstance().apply {
+                timeInMillis = alarmTime
             }
-        ) {
-            TimePicker(state = timePickerState)
+            val timePickerState = rememberTimePickerState(
+                initialHour = calendar.get(Calendar.HOUR_OF_DAY),
+                initialMinute = calendar.get(Calendar.MINUTE),
+                is24Hour = true
+            )
+
+            TimePickerDialog(
+                onDismiss = { showTimePicker = false },
+                onConfirm = {
+                    val newCal = Calendar.getInstance().apply {
+                        timeInMillis = alarmTime
+                        set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                        set(Calendar.MINUTE, timePickerState.minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    viewModel.updateAlarmTime(newCal.timeInMillis)
+                    showTimePicker = false
+                }
+            ) {
+                TimePicker(state = timePickerState)
+            }
         }
     }
 }
@@ -248,7 +279,7 @@ fun TimePickerDialog(
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onConfirm) {

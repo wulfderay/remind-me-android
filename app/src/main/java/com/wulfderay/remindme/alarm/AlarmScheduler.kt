@@ -50,7 +50,13 @@ class AlarmSchedulerImpl @Inject constructor(
             return
         }
 
-        if (task.alarmTime <= System.currentTimeMillis()) {
+        val alarmTime = task.alarmTime
+        if (alarmTime == null) {
+            Log.d(TAG, "Skipping alarm for task ${task.id} with no alarm time")
+            return
+        }
+
+        if (alarmTime <= System.currentTimeMillis()) {
             Log.d(TAG, "Skipping alarm for past time on task ${task.id}")
             return
         }
@@ -67,11 +73,11 @@ class AlarmSchedulerImpl @Inject constructor(
 
         alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
-            task.alarmTime,
+            alarmTime,
             pendingIntent
         )
 
-        Log.d(TAG, "Scheduled alarm for task ${task.id} at ${task.alarmTime}")
+        Log.d(TAG, "Scheduled alarm for task ${task.id} at $alarmTime")
     }
 
     /**

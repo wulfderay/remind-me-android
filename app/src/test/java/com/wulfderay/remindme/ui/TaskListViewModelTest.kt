@@ -231,8 +231,24 @@ class TaskDetailViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("", state.title)
         assertEquals("", state.description)
+        assertEquals(null, state.alarmTime)
         assertFalse(state.isEditing)
         assertFalse(state.isSaved)
+    }
+
+    @Test
+    fun `enabling alarm on new task assigns a future default time`() = runTest {
+        val repo = FakeTaskRepository()
+        val scheduler = FakeAlarmScheduler()
+        val savedState = androidx.lifecycle.SavedStateHandle(mapOf("taskId" to -1L))
+        val viewModel = TaskDetailViewModel(savedState, repo, scheduler)
+        advanceUntilIdle()
+
+        val beforeEnable = System.currentTimeMillis()
+        viewModel.setAlarmEnabled(true)
+        val alarmTime = viewModel.uiState.value.alarmTime
+
+        assertTrue(alarmTime != null && alarmTime > beforeEnable)
     }
 
     @Test
@@ -318,6 +334,48 @@ class TaskDetailViewModelTest {
 
         assertEquals(1, scheduler.scheduledTasks.size)
     }
+
+    @Test
+    fun `new task can be saved without an alarm`() = runTest {
+        val repo = FakeTaskRepository()
+        val scheduler = FakeAlarmScheduler()
+        val savedState = androidx.lifecycle.SavedStateHandle(mapOf("taskId" to -1L))
+        val viewModel = TaskDetailViewModel(savedState, repo, scheduler)
+        advanceUntilIdle()
+
+        viewModel.updateTitle("No Alarm Task")
+        viewModel.saveTask()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isSaved)
+        assertEquals(1, repo.insertedTasks.size)
+        assertEquals(null, repo.insertedTasks[0].alarmTime)
+        assertTrue(scheduler.scheduledTasks.isEmpty())
+    }
+
+    @Test
+    fun `disabling alarm for existing task cancels without rescheduling`() = runTest {
+        val existingTask = TaskEntity(
+            id = 7L,
+            title = "Existing Task",
+            alarmTime = System.currentTimeMillis() + 3600_000
+        )
+        val repo = FakeTaskRepository().apply {
+            tasksById[existingTask.id] = existingTask
+        }
+        val scheduler = FakeAlarmScheduler()
+        val savedState = androidx.lifecycle.SavedStateHandle(mapOf("taskId" to existingTask.id))
+        val viewModel = TaskDetailViewModel(savedState, repo, scheduler)
+        advanceUntilIdle()
+
+        viewModel.setAlarmEnabled(false)
+        viewModel.saveTask()
+        advanceUntilIdle()
+
+        assertEquals(listOf(existingTask.id), scheduler.cancelledIds)
+        assertTrue(scheduler.scheduledTasks.isEmpty())
+        assertEquals(null, repo.updatedTasks.single().alarmTime)
+    }
 }
 
 /**
@@ -333,6 +391,8 @@ class FakeTaskRepository : TaskRepository(
     val markedActiveIds = mutableListOf<Long>()
     val deletedTasks = mutableListOf<TaskEntity>()
     val insertedTasks = mutableListOf<TaskEntity>()
+    val updatedTasks = mutableListOf<TaskEntity>()
+    val tasksById = mutableMapOf<Long, TaskEntity>()
     private var nextId = 1L
 
     override fun getAllTasksByAlarmTime(): Flow<List<TaskEntity>> = tasksByAlarmTime
@@ -353,14 +413,17 @@ class FakeTaskRepository : TaskRepository(
 
     override suspend fun insert(task: TaskEntity): Long {
         insertedTasks.add(task)
-        return nextId++
+        val id = nextId++
+        tasksById[id] = task.copy(id = id)
+        return id
     }
 
     override suspend fun update(task: TaskEntity) {
-        // No-op for tests
+        updatedTasks.add(task)
+        tasksById[task.id] = task
     }
 
-    override suspend fun getTaskByIdOnce(taskId: Long): TaskEntity? = null
+    override suspend fun getTaskByIdOnce(taskId: Long): TaskEntity? = tasksById[taskId]
     override fun getTaskById(taskId: Long): Flow<TaskEntity?> = MutableStateFlow(null)
     override suspend fun getAllActiveTasks(): List<TaskEntity> = emptyList()
 }

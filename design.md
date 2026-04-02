@@ -44,7 +44,7 @@ data class TaskEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val description: String = "",
-    val alarmTime: Long,           // Unix epoch millis
+    val alarmTime: Long? = null,   // Unix epoch millis, null = no alarm
     val isActive: Boolean = true,  // false = completed, never triggers alarms
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -53,9 +53,9 @@ data class TaskEntity(
 **State rules (enforce always):**
 - Completed tasks (`isActive = false`) must never trigger alarms.
 - Deleting a task must cancel its scheduled alarm before removing from DB.
-- Updating `alarmTime` must reschedule the alarm (cancel old, schedule new).
+- Updating `alarmTime` must reschedule the alarm when one is enabled (cancel old, schedule new).
 - Only `isActive = true` tasks are eligible for alarm scheduling.
-- Default new-task alarm time: `System.currentTimeMillis() + 3_600_000` (1 hour from now).
+- New tasks start with no alarm. Enabling an alarm defaults to `System.currentTimeMillis() + 3_600_000` (1 hour from now).
 
 ## Repository & DAO
 
@@ -66,6 +66,7 @@ Key DAO patterns:
 - One-shot lookups are `suspend fun` (e.g., `getTaskByIdOnce`, `getAllActiveTasks`).
 - Completing a task uses the dedicated `@Query("UPDATE … SET isActive = 0 WHERE id = :taskId")` — never update the whole entity just to flip a boolean.
 - Search uses SQL `LIKE '%' || :query || '%'`.
+- Alarm-time ordering keeps tasks with alarms first and tasks without alarms last.
 
 ## Alarm Scheduling
 
@@ -84,7 +85,7 @@ interface AlarmScheduler {
 ```
 
 `AlarmSchedulerImpl` rules:
-- Skip scheduling if task is inactive or `alarmTime` is in the past.
+- Skip scheduling if task is inactive, has no `alarmTime`, or `alarmTime` is in the past.
 - Check `alarmManager.canScheduleExactAlarms()` on Android 12+ (API 31+) before calling `setExactAndAllowWhileIdle`.
 - Use `AlarmManager.RTC_WAKEUP` + `setExactAndAllowWhileIdle`.
 - `PendingIntent` `requestCode` = `taskId.toInt()`, flags = `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`.
@@ -135,6 +136,12 @@ val uiState: StateFlow<TaskListUiState> = /* ... */
 
 `TaskDetailViewModel` reads `taskId: Long` from `SavedStateHandle` (`-1L` = creating new task).
 
+Task detail UI rules:
+- Show an alarm enabled toggle on the edit/create screen.
+- Hide the alarm date/time title and picker buttons when `alarmTime == null`.
+- Turning the toggle on should populate a default alarm time 1 hour in the future.
+- Turning the toggle off should clear `alarmTime` and remove alarm validation errors.
+
 ## Navigation
 
 ```kotlin
@@ -153,7 +160,7 @@ object Routes {
 
 `saveTask()` in `TaskDetailViewModel` must validate:
 1. `title.isNotBlank()` — set `titleError` on failure.
-2. `alarmTime > System.currentTimeMillis()` — set `alarmTimeError` on failure.
+2. If `alarmTime != null`, `alarmTime > System.currentTimeMillis()` — set `alarmTimeError` on failure.
 
 Only proceed with DB + alarm operations if both pass. On success, set `isSaved = true` to trigger navigation back.
 
