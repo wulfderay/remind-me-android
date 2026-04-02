@@ -75,6 +75,7 @@ fun TaskListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSortMenu by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    var searchInput by remember { mutableStateOf("") }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
 
     Scaffold(
@@ -83,8 +84,11 @@ fun TaskListScreen(
                 title = {
                     if (showSearch) {
                         TextField(
-                            value = uiState.searchQuery,
-                            onValueChange = { viewModel.setSearchQuery(it) },
+                            value = searchInput,
+                            onValueChange = {
+                                searchInput = it
+                                viewModel.setSearchQuery(it)
+                            },
                             placeholder = { Text("Search tasks...") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -101,7 +105,10 @@ fun TaskListScreen(
                     // Search toggle
                     IconButton(onClick = {
                         showSearch = !showSearch
-                        if (!showSearch) viewModel.setSearchQuery("")
+                        if (!showSearch) {
+                            searchInput = ""
+                            viewModel.setSearchQuery("")
+                        }
                     }) {
                         Icon(
                             if (showSearch) Icons.Default.Close else Icons.Default.Search,
