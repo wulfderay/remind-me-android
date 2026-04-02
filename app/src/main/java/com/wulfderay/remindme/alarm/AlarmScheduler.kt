@@ -17,7 +17,7 @@ import javax.inject.Singleton
  * Each task gets a unique PendingIntent keyed by task.id.
  */
 @Singleton
-class AlarmScheduler @Inject constructor(
+open class AlarmScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -31,7 +31,7 @@ class AlarmScheduler @Inject constructor(
      * Schedule an exact alarm for the given task.
      * Only schedules if the task is active and alarm time is in the future.
      */
-    fun schedule(task: TaskEntity) {
+    open fun schedule(task: TaskEntity) {
         if (!task.isActive) {
             Log.d(TAG, "Skipping alarm for inactive task ${task.id}")
             return
@@ -64,7 +64,7 @@ class AlarmScheduler @Inject constructor(
     /**
      * Cancel any scheduled alarm for the given task ID.
      */
-    fun cancel(taskId: Long) {
+    open fun cancel(taskId: Long) {
         val pendingIntent = createPendingIntent(taskId)
         alarmManager.cancel(pendingIntent)
         Log.d(TAG, "Cancelled alarm for task $taskId")
@@ -73,7 +73,7 @@ class AlarmScheduler @Inject constructor(
     /**
      * Reschedule an alarm with a time offset (used for snooze).
      */
-    fun rescheduleWithOffset(taskId: Long, offsetMillis: Long) {
+    open fun rescheduleWithOffset(taskId: Long, offsetMillis: Long) {
         val newTime = System.currentTimeMillis() + offsetMillis
         val pendingIntent = createPendingIntent(taskId)
 
