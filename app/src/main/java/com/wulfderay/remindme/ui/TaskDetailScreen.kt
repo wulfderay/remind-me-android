@@ -178,7 +178,7 @@ fun TaskDetailScreen(
     // Date picker dialog
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.alarmTime
+            initialSelectedDateMillis = datePickerSelectionMillis(uiState.alarmTime)
         )
 
         DatePickerDialog(
@@ -186,18 +186,12 @@ fun TaskDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { selectedDate ->
-                        // Preserve the time portion, update only the date
-                        val existingCal = Calendar.getInstance().apply {
-                            timeInMillis = uiState.alarmTime
-                        }
-                        val newCal = Calendar.getInstance().apply {
-                            timeInMillis = selectedDate
-                            set(Calendar.HOUR_OF_DAY, existingCal.get(Calendar.HOUR_OF_DAY))
-                            set(Calendar.MINUTE, existingCal.get(Calendar.MINUTE))
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        viewModel.updateAlarmTime(newCal.timeInMillis)
+                        viewModel.updateAlarmTime(
+                            mergePickedDateWithExistingTime(
+                                selectedDateUtcMillis = selectedDate,
+                                existingAlarmTimeMillis = uiState.alarmTime
+                            )
+                        )
                     }
                     showDatePicker = false
                 }) {

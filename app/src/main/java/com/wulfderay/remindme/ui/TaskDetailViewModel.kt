@@ -20,7 +20,7 @@ import javax.inject.Inject
 data class TaskDetailUiState(
     val title: String = "",
     val description: String = "",
-    val alarmTime: Long = System.currentTimeMillis() + 3600_000, // Default: 1 hour from now
+    val alarmTime: Long = System.currentTimeMillis() + 3600_000,
     val isActive: Boolean = true,
     val isEditing: Boolean = false,
     val isSaved: Boolean = false,

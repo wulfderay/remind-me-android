@@ -96,10 +96,15 @@ class TaskListViewModel @Inject constructor(
      * Mark a task as completed (inactive).
      * Cancels any scheduled alarm for the task.
      */
-    fun completeTask(taskId: Long) {
+    fun setTaskCompleted(task: TaskEntity, completed: Boolean) {
         viewModelScope.launch {
-            repository.markInactive(taskId)
-            alarmScheduler.cancel(taskId)
+            if (completed) {
+                repository.markInactive(task.id)
+                alarmScheduler.cancel(task.id)
+            } else {
+                repository.markActive(task.id)
+                alarmScheduler.schedule(task.copy(isActive = true))
+            }
         }
     }
 

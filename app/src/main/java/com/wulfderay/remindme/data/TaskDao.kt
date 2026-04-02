@@ -51,6 +51,10 @@ interface TaskDao {
     @Query("UPDATE tasks SET isActive = 0 WHERE id = :taskId")
     suspend fun markInactive(taskId: Long)
 
+    /** Mark a task as active again. */
+    @Query("UPDATE tasks SET isActive = 1 WHERE id = :taskId")
+    suspend fun markActive(taskId: Long)
+
     /** Search tasks by title. */
     @Query("SELECT * FROM tasks WHERE title LIKE '%' || :query || '%' ORDER BY alarmTime ASC")
     fun searchTasks(query: String): Flow<List<TaskEntity>>

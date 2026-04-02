@@ -39,6 +39,9 @@ open class TaskRepository @Inject constructor(
     open suspend fun markInactive(taskId: Long) =
         taskDao.markInactive(taskId)
 
+    open suspend fun markActive(taskId: Long) =
+        taskDao.markActive(taskId)
+
     open fun searchTasks(query: String): Flow<List<TaskEntity>> =
         taskDao.searchTasks(query)
 }

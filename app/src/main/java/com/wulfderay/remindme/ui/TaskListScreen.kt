@@ -16,11 +16,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.rememberDismissState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,14 +38,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,7 +112,7 @@ fun TaskListScreen(
                     // Sort menu
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(
                             expanded = showSortMenu,
@@ -188,7 +190,7 @@ fun TaskListScreen(
                 ) { task ->
                     SwipeableTaskItem(
                         task = task,
-                        onComplete = { viewModel.completeTask(task.id) },
+                        onCheckedChange = { completed -> viewModel.setTaskCompleted(task, completed) },
                         onDelete = { taskToDelete = task },
                         onClick = { onNavigateToDetail(task.id) },
                         onLongClick = { taskToDelete = task }
@@ -224,49 +226,49 @@ fun TaskListScreen(
 /**
  * A task list item with swipe-to-complete and swipe-to-delete support.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun SwipeableTaskItem(
     task: TaskEntity,
-    onComplete: () -> Unit,
+    onCheckedChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { dismissValue ->
+    val dismissState = rememberDismissState(
+        confirmStateChange = { dismissValue ->
             when (dismissValue) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    onComplete()
+                DismissValue.DismissedToEnd -> {
+                    onCheckedChange(true)
                     true
                 }
-                SwipeToDismissBoxValue.EndToStart -> {
+                DismissValue.DismissedToStart -> {
                     onDelete()
                     false // Don't dismiss, show confirmation dialog
                 }
-                SwipeToDismissBoxValue.Settled -> false
+                DismissValue.Default -> false
             }
         }
     )
 
-    SwipeToDismissBox(
+    SwipeToDismiss(
         state = dismissState,
-        backgroundContent = {
+        background = {
             val direction = dismissState.dismissDirection
             val color by animateColorAsState(
                 when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFF4CAF50) // Green for complete
-                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFF44336) // Red for delete
+                    DismissDirection.StartToEnd -> Color(0xFF4CAF50) // Green for complete
+                    DismissDirection.EndToStart -> Color(0xFFF44336) // Red for delete
                     else -> Color.Transparent
                 },
                 label = "swipe_bg"
             )
             val alignment = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                DismissDirection.StartToEnd -> Alignment.CenterStart
                 else -> Alignment.CenterEnd
             }
             val icon = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Close
+                DismissDirection.StartToEnd -> Icons.Default.Close
                 else -> Icons.Default.Delete
             }
 
@@ -280,16 +282,19 @@ fun SwipeableTaskItem(
                 Icon(icon, contentDescription = null, tint = Color.White)
             }
         },
-        enableDismissFromStartToEnd = task.isActive,
-        enableDismissFromEndToStart = true
-    ) {
-        TaskItem(
-            task = task,
-            onCheckedChange = { onComplete() },
-            onClick = onClick,
-            onLongClick = onLongClick
-        )
-    }
+        directions = buildSet {
+            if (task.isActive) add(DismissDirection.StartToEnd)
+            add(DismissDirection.EndToStart)
+        },
+        dismissContent = {
+            TaskItem(
+                task = task,
+                onCheckedChange = onCheckedChange,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+        }
+    )
 }
 
 /**
@@ -299,7 +304,7 @@ fun SwipeableTaskItem(
 @Composable
 fun TaskItem(
     task: TaskEntity,
-    onCheckedChange: () -> Unit,
+    onCheckedChange: (Boolean) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -332,8 +337,7 @@ fun TaskItem(
         ) {
             Checkbox(
                 checked = !task.isActive,
-                onCheckedChange = { if (task.isActive) onCheckedChange() },
-                enabled = task.isActive
+                onCheckedChange = { checked -> onCheckedChange(checked) }
             )
 
             Spacer(modifier = Modifier.width(8.dp))

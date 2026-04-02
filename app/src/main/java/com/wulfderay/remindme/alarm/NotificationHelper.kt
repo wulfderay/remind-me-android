@@ -1,8 +1,11 @@
 package com.wulfderay.remindme.alarm
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -38,6 +41,7 @@ class NotificationHelper @Inject constructor(
     }
 
     private fun createNotificationChannel() {
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
@@ -46,6 +50,13 @@ class NotificationHelper @Inject constructor(
             description = "Notifications for task alarms"
             enableVibration(true)
             setShowBadge(true)
+            setSound(
+                soundUri,
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
         }
         notificationManager.createNotificationChannel(channel)
     }
@@ -83,6 +94,7 @@ class NotificationHelper @Inject constructor(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
+            .setDefaults(Notification.DEFAULT_SOUND)
             .addAction(R.drawable.ic_notification, "Snooze (+10 min)", snoozePendingIntent)
             .addAction(R.drawable.ic_notification, "Stop", stopPendingIntent)
             .build()

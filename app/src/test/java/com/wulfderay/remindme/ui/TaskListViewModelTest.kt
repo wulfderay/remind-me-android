@@ -1,5 +1,6 @@
 package com.wulfderay.remindme.ui
 
+import app.cash.turbine.test
 import com.wulfderay.remindme.alarm.AlarmScheduler
 import com.wulfderay.remindme.data.TaskEntity
 import com.wulfderay.remindme.data.TaskRepository
@@ -7,7 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -57,12 +57,17 @@ class TaskListViewModelTest {
             title = "Test",
             alarmTime = System.currentTimeMillis() + 60000
         )
-        fakeRepository.tasksByAlarmTime.value = listOf(task)
-        advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertEquals(1, state.tasks.size)
-        assertEquals("Test", state.tasks[0].title)
+        viewModel.uiState.test {
+            assertTrue(awaitItem().tasks.isEmpty())
+
+            fakeRepository.tasksByAlarmTime.value = listOf(task)
+            advanceUntilIdle()
+
+            val state = awaitItem()
+            assertEquals(1, state.tasks.size)
+            assertEquals("Test", state.tasks[0].title)
+        }
     }
 
     @Test
@@ -70,32 +75,51 @@ class TaskListViewModelTest {
         val taskByAlarm = TaskEntity(id = 1, title = "ByAlarm", alarmTime = 1000)
         val taskByCreated = TaskEntity(id = 2, title = "ByCreated", alarmTime = 2000, createdAt = 5000)
 
-        fakeRepository.tasksByAlarmTime.value = listOf(taskByAlarm)
-        fakeRepository.tasksByCreatedAt.value = listOf(taskByCreated)
-        advanceUntilIdle()
+        viewModel.uiState.test {
+            assertTrue(awaitItem().tasks.isEmpty())
 
-        // Default sort by alarm time
-        assertEquals("ByAlarm", viewModel.uiState.value.tasks[0].title)
+            fakeRepository.tasksByAlarmTime.value = listOf(taskByAlarm)
+            fakeRepository.tasksByCreatedAt.value = listOf(taskByCreated)
+            advanceUntilIdle()
 
-        // Switch to created at
-        viewModel.setSortMode(SortMode.BY_CREATED_AT)
-        advanceUntilIdle()
+            assertEquals("ByAlarm", awaitItem().tasks[0].title)
 
-        assertEquals(SortMode.BY_CREATED_AT, viewModel.uiState.value.sortMode)
-        assertEquals("ByCreated", viewModel.uiState.value.tasks[0].title)
+            viewModel.setSortMode(SortMode.BY_CREATED_AT)
+            advanceUntilIdle()
+
+            val updatedState = awaitItem()
+            assertEquals(SortMode.BY_CREATED_AT, updatedState.sortMode)
+            assertEquals("ByCreated", updatedState.tasks[0].title)
+        }
     }
 
     @Test
-    fun `completeTask marks task inactive and cancels alarm`() = runTest {
-        val task = TaskEntity(id = 1, title = "Test", alarmTime = 1000)
+    fun `marking task complete makes it inactive and cancels alarm`() = runTest {
+        val task = TaskEntity(id = 1, title = "Test", alarmTime = System.currentTimeMillis() + 60_000)
         fakeRepository.tasksByAlarmTime.value = listOf(task)
         advanceUntilIdle()
 
-        viewModel.completeTask(1)
+        viewModel.setTaskCompleted(task, completed = true)
         advanceUntilIdle()
 
         assertTrue(fakeRepository.markedInactiveIds.contains(1L))
         assertTrue(fakeAlarmScheduler.cancelledIds.contains(1L))
+    }
+
+    @Test
+    fun `unchecking a completed task marks it active and reschedules alarm`() = runTest {
+        val task = TaskEntity(
+            id = 1,
+            title = "Test",
+            alarmTime = System.currentTimeMillis() + 60_000,
+            isActive = false
+        )
+
+        viewModel.setTaskCompleted(task, completed = false)
+        advanceUntilIdle()
+
+        assertTrue(fakeRepository.markedActiveIds.contains(1L))
+        assertEquals(listOf(task.copy(isActive = true)), fakeAlarmScheduler.scheduledTasks)
     }
 
     @Test
@@ -114,12 +138,70 @@ class TaskListViewModelTest {
     @Test
     fun `search query filters tasks`() = runTest {
         val searchResult = TaskEntity(id = 3, title = "SearchResult", alarmTime = 3000)
-        fakeRepository.searchResults.value = listOf(searchResult)
 
-        viewModel.setSearchQuery("Search")
-        advanceUntilIdle()
+        viewModel.uiState.test {
+            assertTrue(awaitItem().tasks.isEmpty())
 
-        assertEquals("SearchResult", viewModel.uiState.value.tasks[0].title)
+            fakeRepository.searchResults.value = listOf(searchResult)
+            viewModel.setSearchQuery("Search")
+            advanceUntilIdle()
+
+            assertEquals("SearchResult", awaitItem().tasks[0].title)
+        }
+    }
+}
+
+class AlarmDateTimeTest {
+
+    @Test
+    fun `date picker selection uses UTC midnight for the local task date`() {
+        val timezone = java.util.TimeZone.getTimeZone("America/Los_Angeles")
+        val alarmTime = java.util.Calendar.getInstance(timezone).apply {
+            clear()
+            set(2026, java.util.Calendar.APRIL, 2, 15, 30, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val pickerMillis = datePickerSelectionMillis(alarmTime, timezone)
+        val utcCalendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = pickerMillis
+        }
+
+        assertEquals(2026, utcCalendar.get(java.util.Calendar.YEAR))
+        assertEquals(java.util.Calendar.APRIL, utcCalendar.get(java.util.Calendar.MONTH))
+        assertEquals(2, utcCalendar.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(0, utcCalendar.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(0, utcCalendar.get(java.util.Calendar.MINUTE))
+    }
+
+    @Test
+    fun `merging picked date preserves selected day in local time`() {
+        val timezone = java.util.TimeZone.getTimeZone("America/Los_Angeles")
+        val existingAlarmTime = java.util.Calendar.getInstance(timezone).apply {
+            clear()
+            set(2026, java.util.Calendar.APRIL, 1, 15, 30, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val selectedDateUtcMillis = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(2026, java.util.Calendar.APRIL, 2, 0, 0, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val mergedAlarmTime = mergePickedDateWithExistingTime(
+            selectedDateUtcMillis = selectedDateUtcMillis,
+            existingAlarmTimeMillis = existingAlarmTime,
+            timeZone = timezone
+        )
+        val localCalendar = java.util.Calendar.getInstance(timezone).apply {
+            timeInMillis = mergedAlarmTime
+        }
+
+        assertEquals(2026, localCalendar.get(java.util.Calendar.YEAR))
+        assertEquals(java.util.Calendar.APRIL, localCalendar.get(java.util.Calendar.MONTH))
+        assertEquals(2, localCalendar.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(15, localCalendar.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(30, localCalendar.get(java.util.Calendar.MINUTE))
     }
 }
 
@@ -248,6 +330,7 @@ class FakeTaskRepository : TaskRepository(
     val tasksByCreatedAt = MutableStateFlow<List<TaskEntity>>(emptyList())
     val searchResults = MutableStateFlow<List<TaskEntity>>(emptyList())
     val markedInactiveIds = mutableListOf<Long>()
+    val markedActiveIds = mutableListOf<Long>()
     val deletedTasks = mutableListOf<TaskEntity>()
     val insertedTasks = mutableListOf<TaskEntity>()
     private var nextId = 1L
@@ -258,6 +341,10 @@ class FakeTaskRepository : TaskRepository(
 
     override suspend fun markInactive(taskId: Long) {
         markedInactiveIds.add(taskId)
+    }
+
+    override suspend fun markActive(taskId: Long) {
+        markedActiveIds.add(taskId)
     }
 
     override suspend fun delete(task: TaskEntity) {
@@ -292,6 +379,7 @@ private class FakeTaskDao : com.wulfderay.remindme.data.TaskDao {
     override suspend fun update(task: TaskEntity) {}
     override suspend fun delete(task: TaskEntity) {}
     override suspend fun markInactive(taskId: Long) {}
+    override suspend fun markActive(taskId: Long) {}
     override fun searchTasks(query: String) = MutableStateFlow<List<TaskEntity>>(emptyList())
 }
 
